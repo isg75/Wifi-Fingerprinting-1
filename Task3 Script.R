@@ -40,7 +40,7 @@ Train$USERID <- as.factor(Train$USERID)
 Train$PHONEID <- as.factor(Train$PHONEID)
 Train$TIMESTAMP <- as_datetime(Train$TIMESTAMP)
 
-Train[Train == 100] <- -200
+Train[Train == 100] <- -105
 
 #Test set
 str(Test[520:530])
@@ -53,7 +53,7 @@ Test$USERID <- as.factor(Test$USERID)
 Test$PHONEID <- as.factor(Test$PHONEID)
 Test$TIMESTAMP <- as_datetime(Test$TIMESTAMP)
 
-Test[Test == 100] <- -200
+Test[Test == 100] <- -105
 
 
 
@@ -164,18 +164,6 @@ mape(DF_test$LATITUDE, pred.lat$predictions)
 mae(DF_test$LATITUDE, pred.lat$predictions)
 
 
-#Culling the data ----
-
-DF_plot <- DF %>%
-  dplyr::group_by(PHONEID, BUILDINGID) %>%
-  dplyr::summarise_at(.vars = vars(1:520),
-                      .funs = c(max="max"))
-DF_plot %>%
-  keep(is.numeric) %>% 
-  gather() %>% 
-  ggplot(aes(value)) +
-  facet_wrap(~ key, scales = "free") +
-  geom_histogram()
 
 
 #Val only -----
@@ -284,8 +272,9 @@ abline(a=0,b=1)
 
 plot(pred.val.lon$predictions, pred.val.lat$predictions)
 
-#New ds with difference
 
+
+#New ds with difference
 
 PredDiff <- data.frame(LAT = abs(DF.val_test$LATITUDE - pred.val.lat$predictions),
                        LON = abs(DF.val_test$LONGITUDE - pred.val.lon$predictions),
@@ -305,59 +294,135 @@ plot(PredDiff$LON, col = PredDiff$FLOOR,
 
 
 plot_ly(type = "scatter3d",
-        x =  DF.val$LATITUDE,
-        y =  DF.val$LONGITUDE,
-        z =  DF.val$FLOOR,
-        mode = 'markers')
+        x =  Train$LATITUDE,
+        y =  Train$LONGITUDE,
+        z =  Train$FLOOR,
+        mode = 'markers',
+        color = ~Train$PHONEID)
 
 
-#Super cool function
-BUILDING <- function(Training, Testing){
-  
-  Training <- Training %>%   select(-c(LONGITUDE, LATITUDE, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
-  Training$FLOOR <- droplevels(Training$FLOOR)
-  Training$FLOOR <- droplevels(Training$FLOOR)
-  
-  Predictions <- list()
-  Metrics <- list()
-  
-  #RF
-  rg.building <- ranger(BUILDINGID ~ . - LONGITUDE - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, Training, importance = "permutation")
-  rg.pred.building <- predict(rg.building, Testing)
-  rg.table.building <- confusionMatrix(table(Testing$BUILDINGID, rg.pred.building$predictions))
-  
-  Predictions[["RF"]] <- rg.pred.building
-  Metrics[["RF"]] <- rg.table.building
-  
-  #KNN
-  
-  knn.building <- knn3(BUILDINGID ~ ., Training)
-  knn.pred.building <- predict(knn.building, Testing)
-  knn.table.building <- confusionMatrix(table(Testing$BUILDINGID, knn.pred.building))
-  
-  Predictions[["KNN"]] <- knn.pred.building
-  Metrics[["KNN"]] <- knn.table.building
-  
-  #SVM
-  svm.building <- svm(BUILDINGID ~ ., Training)
-  svm.pred.building <- predict(svm.building, Testing)
-  svm.table.building <- confusionMatrix(table(Testing$BUILDINGID, knn.pred.building))
-  
-  
-  Predictions[["SVM"]] <- svm.pred.building
-  
-  
-  Output <- list(Predictions, Metrics)
-  Output
-}
 
-BUILDING(DF.val_train, DF.val_test)
 
-Training <- DF.val_train %>%   select(-c(LONGITUDE, LATITUDE, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
-Testing <- DF.val_test%>%   select(-c(LONGITUDE, LATITUDE, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
-knn.building <- knn3(BUILDINGID ~ ., Training)
-knn.pred.building <- predict(knn.building, DF.val_test)
-knn.table.building <- confusionMatrix(table(DF.val_test$BUILDINGID, knn.pred.building))
+
+#BUILDING
+set.seed(420)
+df.tv.rg.building <- ranger(BUILDINGID ~ . - LONGITUDE - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV, importance = "permutation")
+df.tv.pred.building <- predict(df.tv.rg.building, DF.val_test)
+rg.tv.table.building <- table(DF.val_test$BUILDINGID, df.tv.pred.building$predictions) #0.1 accuracy
+print(confusionMatrix(rg.tv.table.building))
+
+#FLOOR
+set.seed(420)
+df.tv.rg.floor <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV, importance = "permutation")
+df.tv.pred.floor <- predict(df.tv.rg.floor, DF.val_test)
+rg.tv.table.floor <- table(DF.val_test$FLOOR, df.tv.pred.floor$predictions) #0.9424 accuracy
+print(confusionMatrix(rg.tv.table.floor))
+
+#B0
+
+DF.TV_train_b0 <- DF.TV %>%
+  filter(BUILDINGID == 0)
+DF.TV_test_b0 <- DF.val_test %>%
+  filter(BUILDINGID == 0)
+DF.TV_train_b0$FLOOR <- droplevels(DF.TV_train_b0$FLOOR)
+DF.TV_test_b0$FLOOR <- droplevels(DF.TV_test_b0$FLOOR)
+
+set.seed(420)
+rg.TV.b0 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b0,  importance = "permutation")
+pred.rg.TV.b0 <- predict(rg.TV.b0, DF.TV_test_b0)
+rg.TV.table.b0 <- table(DF.TV_test_b0$FLOOR, pred.rg.TV.b0$predictions) #0.94 accuracy
+print(confusionMatrix(rg.TV.table.b0))
+
+#B1
+
+DF.TV_train_b1 <- DF.TV %>%
+  filter(BUILDINGID == 1)
+DF.TV_test_b1 <- DF.val_test %>%
+  filter(BUILDINGID == 1)
+DF.TV_train_b1$FLOOR <- droplevels(DF.TV_train_b1$FLOOR)
+DF.TV_test_b1$FLOOR <- droplevels(DF.TV_test_b1$FLOOR)
+
+set.seed(420)
+rg.TV.b1 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b1,  importance = "permutation")
+pred.rg.TV.b1 <- predict(rg.TV.b1, DF.TV_test_b1)
+rg.TV.table.b1 <- table(DF.TV_test_b1$FLOOR, pred.rg.TV.b1$predictions) #0.90 accuracy
+print(confusionMatrix(rg.TV.table.b1))
+
+#B2
+
+DF.TV_train_b2 <- DF.TV %>%
+  filter(BUILDINGID == 2)
+DF.TV_test_b2 <- DF.val_test %>%
+  filter(BUILDINGID == 2)
+DF.TV_train_b2$FLOOR <- droplevels(DF.TV_train_b2$FLOOR)
+DF.TV_test_b2$FLOOR <- droplevels(DF.TV_test_b2$FLOOR)
+
+set.seed(420)
+rg.TV.b2 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b2,  importance = "permutation")
+pred.rg.TV.b2 <- predict(rg.TV.b2, DF.TV_test_b2)
+rg.TV.table.b2 <- table(DF.TV_test_b2$FLOOR, pred.rg.TV.b2$predictions) #0.98 accuracy
+print(confusionMatrix(rg.TV.table.b2))
+
+
+#LON
+
+set.seed(420)
+rg.TV.lon <- ranger(LONGITUDE ~ . - FLOOR - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV,  importance = "permutation")
+pred.TV.lon <- predict(rg.TV.lon, DF.val_test)
+
+postResample(pred.TV.lon$predictions, DF.val_test$LONGITUDE) #7.268 MAE
+postResample(rg.TV.lon$predictions, DF.TV$LONGITUDE)  #7.904 MAE
+
+plot(pred.TV.lon$predictions,DF.val_test$LONGITUDE, col = DF.val_test$BUILDINGID,
+     xlab="predicted",ylab="actual")
+abline(a=0,b=1)
+
+
+
+#LAT
+set.seed(420)
+rg.TV.lat <- ranger(LATITUDE ~ . - FLOOR - LONGITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV,  importance = "permutation")
+pred.TV.lat <- predict(rg.TV.lat, DF.val_test)
+
+postResample(pred.TV.lat$predictions, DF.val_test$LATITUDE) #6.247 MAE
+postResample(rg.TV.lat$predictions, DF.TV$LATITUDE)  #7.025 MAE
+
+plot(pred.TV.lat$predictions,DF.val_test$LATITUDE, col = DF.val_test$BUILDINGID,
+     xlab="predicted",ylab="actual")
+abline(a=0,b=1)
+
+
+
+PredDiff <- data.frame(LAT = abs(DF.val_test$LATITUDE - pred.TV.lat$predictions),
+                       LON = abs(DF.val_test$LONGITUDE - pred.TV.lon$predictions),
+                       BUILDING = DF.val_test$BUILDINGID,
+                       FLOOR = DF.val_test$FLOOR,
+                       PHONEID = DF.val_test$PHONEID,
+                       USERID = DF.val_test$USERID)
+
+plot(PredDiff$LAT, col = PredDiff$BUILDING,
+     xlab="Instance",ylab="Prediction Error")
+plot(PredDiff$LON, col = PredDiff$BUILDING,
+     xlab="Instance",ylab="Prediction Error")
+
+plot(PredDiff$LAT, col = PredDiff$FLOOR,
+     xlab="Instance",ylab="Prediction Error")
+plot(PredDiff$LON, col = PredDiff$FLOOR,
+     xlab="Instance",ylab="Prediction Error")
+
+
+table(Train$USERID)
+table(Train$PHONEID)
+
+
+plot_ly(type = "scatter3d",
+        x =  Train$LATITUDE,
+        y =  Train$LONGITUDE,
+        z =  Train$FLOOR,
+        mode = 'markers',
+        color = ~Train$PHONEID)
+
+
 
 
 
@@ -420,111 +485,240 @@ postResample(pred.val.lat$predictions, DF.val_test$LATITUDE) #7.134 MAE
 
 
 #Adding Training lines to Validation -----
+TrainStep <- Train[ rowSums(Train[,c(1:520)] > -30) <= 1, ]
 
-DF.106 <- Train %>% filter(SPACEID == 106)
-
-plot(DF.106$BUILDINGID)
-
-LATLON <- Train %>%
-  mutate(WAPs = sum(Train[1:520])) %>%
+            
+LATLONf0 <- TrainStep %>%
+  filter(FLOOR == 0) %>%
+  mutate(WAPs = sum(TrainStep[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
+LATLONf1 <- TrainStep %>%
+  filter(FLOOR == 1) %>%
+  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  group_by(LATITUDE, LONGITUDE) %>%
+  slice(which.max(WAPs))
+
+LATLONf2 <- TrainStep %>%
+  filter(FLOOR == 2) %>%
+  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  group_by(LATITUDE, LONGITUDE) %>%
+  slice(which.max(WAPs))
+
+LATLONf3 <- TrainStep %>% 
+  filter(FLOOR == 3) %>%
+  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  group_by(LATITUDE, LONGITUDE) %>%
+  slice(which.max(WAPs))
+
+LATLONf4 <- TrainStep %>%
+  filter(FLOOR == 4) %>%
+  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  group_by(LATITUDE, LONGITUDE) %>%
+  slice(which.max(WAPs))
+
+LATLON <- bind_rows(LATLONf0, LATLONf1, LATLONf2, LATLONf3, LATLONf4)
 LATLON$WAPs <- NULL
 
-DF.TV <- bind_rows(DF.val, LATLON)
+DF.TV <- bind_rows(DF.val_train, LATLON)
 DF.TV$SPACEID <- as.factor(DF.TV$SPACEID)
 DF.TV$RELATIVEPOSITION <- as.factor(DF.TV$RELATIVEPOSITION)
 DF.TV$USERID <- as.factor(DF.TV$USERID)
 DF.TV$PHONEID <- as.factor(DF.TV$PHONEID)
-s_size <- floor(0.75*nrow(DF.TV))
+
+#Super cool function -----
+BUILDING <- function(Training, Testing){
+  
+  Training <- Training %>%   select(-c(LONGITUDE, LATITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+  
+  Model <- list()
+  Predictions <- list()
+  Metrics <- list()
+  
+  #RF
+  set.seed(420)
+  rg.building <- ranger(BUILDINGID ~ . - LONGITUDE - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, Training, importance = "permutation")
+  rg.pred.building <- predict(rg.building, Testing)
+  rg.table.building <- confusionMatrix(table(Testing$BUILDINGID, rg.pred.building$predictions))
+  
+  Model[["RF"]] <- rg.building
+  Predictions[["RF"]] <- rg.pred.building
+  Metrics[["RF"]] <- rg.table.building
+  
+  #KNN
+  set.seed(420)
+  knn.building <- train(BUILDINGID ~ ., Training, method = "knn")
+  knn.pred.building <- predict(knn.building, Testing)
+  knn.table.building <- confusionMatrix(table(Testing$BUILDINGID, knn.pred.building))
+  
+  Model[["KNN"]] <- knn.building
+  Predictions[["KNN"]] <- knn.pred.building
+  Metrics[["KNN"]] <- knn.table.building
+  
+  #SVM
+  set.seed(420)
+  svm.building <- svm(BUILDINGID ~ ., Training)
+  svm.pred.building <- predict(svm.building, Testing)
+  svm.table.building <- confusionMatrix(table(Testing$BUILDINGID, svm.pred.building))
+  
+  Model[["SVM"]] <- svm.building
+  Predictions[["SVM"]] <- svm.pred.building
+  Metrics[["SVM"]] <- svm.table.building
+  
+  
+  Output <- list(Model, Predictions, Metrics)
+  Output
+}
+
+FLOOR <- function(Training, Testing){
+  
+  Training <- Training %>%   select(-c(LONGITUDE, LATITUDE, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+  Training$FLOOR <- droplevels(Training$FLOOR)
+  Training$FLOOR <- droplevels(Training$FLOOR)
+  
+  Model <- list()
+  Predictions <- list()
+  Metrics <- list()
+  
+  #RF
+  set.seed(420)
+  rg.floor <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, Training, importance = "permutation")
+  rg.pred.floor <- predict(rg.floor, Testing)
+  rg.table.floor <- confusionMatrix(table(Testing$FLOOR, rg.pred.floor$predictions))
+  
+  Model[["RF"]] <- rg.floor
+  Predictions[["RF"]] <- rg.pred.floor
+  Metrics[["RF"]] <- rg.table.floor
+  
+  #KNN
+  set.seed(420)
+  knn.floor <- train(FLOOR ~ ., Training, method = "knn")
+  knn.pred.floor <- predict(knn.floor, Testing)
+  knn.table.floor <- confusionMatrix(table(Testing$FLOOR, knn.pred.floor))
+  
+  Model[["KNN"]] <- knn.floor
+  Predictions[["KNN"]] <- knn.pred.floor
+  Metrics[["KNN"]] <- knn.table.floor
+  
+  #SVM
+  set.seed(420)
+  svm.floor <- svm(FLOOR ~ ., Training)
+  svm.pred.floor <- predict(svm.floor, Testing)
+  svm.table.floor <- confusionMatrix(table(Testing$FLOOR, svm.pred.floor))
+  
+  Model[["SVM"]] <- svm.floor
+  Predictions[["SVM"]] <- svm.pred.floor
+  Metrics[["SVM"]] <- svm.table.floor
+  
+  
+  Output <- list(Model, Predictions, Metrics)
+  Output
+}
+
+LATITUDE <- function(Training, Testing){
+  
+  Training <- Training %>%   select(-c(LONGITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+  
+  Model <- list()
+  Predictions <- list()
+  Metrics <- list()
+  
+  #RF
+  set.seed(420)
+  rg.lat <- ranger(LATITUDE ~ . - LONGITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, Training, importance = "permutation")
+  rg.pred.lat <- predict(rg.lat, Testing, interval = "predict")
+  rg.table.lat <- postResample(rg.pred.lat$predictions, Testing$LATITUDE)
+  
+  Model[["RF"]] <- rg.lat
+  Predictions[["RF"]] <- rg.pred.lat
+  Metrics[["RF"]] <- rg.table.lat
+  
+  #KNN
+  set.seed(420)
+  knn.lat <- train(LATITUDE ~ ., Training, method = "knn")
+  knn.pred.lat <- predict(knn.lat, Testing, interval = "predict")
+  knn.table.lat <- postResample(knn.pred.lat, Testing$LATITUDE)
+  
+  Model[["KNN"]] <- knn.lat
+  Predictions[["KNN"]] <- knn.pred.lat
+  Metrics[["KNN"]] <- knn.table.lat
+  
+  #SVM
+  set.seed(420)
+  svm.lat <- svm(LATITUDE ~ ., Training)
+  svm.pred.lat <- predict(svm.lat, Testing, interval = "predict")
+  svm.table.lat <- postResample(svm.pred.lat, Testing$LATITUDE)
+  
+  Model[["SVM"]] <- svm.lat
+  Predictions[["SVM"]] <- svm.pred.lat
+  Metrics[["SVM"]] <- svm.table.lat
+  
+  
+  Output <- list(Model, Predictions, Metrics)
+  Output
+}
+
+LONGITUDE <- function(Training, Testing){
+  
+  Training <- Training %>%   select(-c(LATITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+  
+  Model <- list()
+  Predictions <- list()
+  Metrics <- list()
+  
+  #RF
+  set.seed(420)
+  rg.lon <- ranger(LONGITUDE ~ . - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, Training, importance = "permutation")
+  rg.pred.lon <- predict(rg.lon, Testing)
+  rg.table.lon <- postResample(rg.pred.lon$predictions, Testing$LONGITUDE)
+  
+  Model[["RF"]] <- rg.lon
+  Predictions[["RF"]] <- rg.pred.lon
+  Metrics[["RF"]] <- rg.table.lon
+  
+  #KNN
+  set.seed(420)
+  knn.lon <- train(LONGITUDE ~ ., Training, method = "knn")
+  knn.pred.lon <- predict(knn.lon, Testing)
+  knn.table.lon <- postResample(knn.pred.lon, Testing$LONGITUDE)
+  
+  Model[["KNN"]] <- knn.lon
+  Predictions[["KNN"]] <- knn.pred.lon
+  Metrics[["KNN"]] <- knn.table.lon
+  
+  #SVM
+  set.seed(420)
+  svm.lon <- svm(LONGITUDE ~ ., Training)
+  svm.pred.lon <- predict(svm.lon, Testing)
+  svm.table.lon <- postResample(svm.pred.lon, Testing$LONGITUDE)
+  
+  Model[["SVM"]] <- svm.lon
+  Predictions[["SVM"]] <- svm.pred.lon
+  Metrics[["SVM"]] <- svm.table.lon
+  
+  
+  Output <- list(Model, Predictions, Metrics)
+  Output
+}
+
+Results <- list()
+Results[["BUILDING"]] <- BUILDING(DF.TV, DF.val_test)
+Results[["FLOOR"]] <- FLOOR(DF.TV, DF.val_test)
+Results[["LATITUDE"]] <- LATITUDE(DF.TV, DF.val_test)
+Results[["LONGITUDE"]] <- LONGITUDE(DF.TV, DF.val_test)
+
 set.seed(420)
-inTraining <- sample(seq_len(nrow(DF.TV)), size = s_size)
-DF.TV_train <- DF.TV[inTraining,]
-DF.TV_test <- DF.TV[-inTraining, ] 
+Training <- DF.TV %>%   select(-c(LONGITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
 
-#BUILDING
-df.tv.rg.building <- ranger(BUILDINGID ~ . - LONGITUDE - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train, importance = "permutation")
-df.tv.pred.building <- predict(df.tv.rg.building, DF.TV_test)
-rg.tv.table.building <- table(DF.TV_test$BUILDINGID, df.tv.pred.building$predictions) #0.9933 accuracy
-print(confusionMatrix(rg.tv.table.building))
+knn.lat <- train(LATITUDE ~ ., Training, method = "knn", trControl = train_control)
+knn.pred.lat <- predict(knn.lat, DF.val_test)
+knn.table.lat <- postResample(knn.pred.lat, DF.val_test$LATITUDE)
+error.lat <- qt(.95, nrow(DF.val_test)-1) * sd(knn.pred.lat) / sqrt(nrow(DF.val_test))
 
-#FLOOR
-df.tv.rg.floor <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train, importance = "permutation")
-df.tv.pred.floor <- predict(df.tv.rg.floor, DF.TV_test)
-rg.tv.table.floor <- table(DF.TV_test$FLOOR, df.tv.pred.floor$predictions) #0.942 accuracy
-print(confusionMatrix(rg.tv.table.floor))
+plot(knn.pred.lat - DF.val_test$LATITUDE, type = "l")
+lines((knn.pred.lat - DF.val_test$LATITUDE) + error, col = "blue")
+lines((knn.pred.lat - DF.val_test$LATITUDE) - error, col = "red")
 
-#B0
-
-DF.TV_train_b0 <- DF.TV_train %>%
-  filter(BUILDINGID == 0)
-DF.TV_test_b0 <- DF.TV_test %>%
-  filter(BUILDINGID == 0)
-DF.TV_train_b0$FLOOR <- droplevels(DF.TV_train_b0$FLOOR)
-DF.TV_test_b0$FLOOR <- droplevels(DF.TV_test_b0$FLOOR)
-
-set.seed(420)
-rg.TV.b0 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b0,  importance = "permutation")
-pred.rg.TV.b0 <- predict(rg.TV.b0, DF.TV_test_b0)
-rg.TV.table.b0 <- table(DF.TV_test_b0$FLOOR, pred.rg.TV.b0$predictions) #0.98 accuracy
-print(confusionMatrix(rg.TV.table.b0))
-
-#B1
-
-DF.TV_train_b1 <- DF.TV_train %>%
-  filter(BUILDINGID == 1)
-DF.TV_test_b1 <- DF.TV_test %>%
-  filter(BUILDINGID == 1)
-DF.TV_train_b1$FLOOR <- droplevels(DF.TV_train_b1$FLOOR)
-DF.TV_test_b1$FLOOR <- droplevels(DF.TV_test_b1$FLOOR)
-
-set.seed(420)
-rg.TV.b1 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b1,  importance = "permutation")
-pred.rg.TV.b1 <- predict(rg.TV.b1, DF.TV_test_b1)
-rg.TV.table.b1 <- table(DF.TV_test_b1$FLOOR, pred.rg.TV.b1$predictions) #0.93 accuracy
-print(confusionMatrix(rg.TV.table.b1))
-
-#B2
-
-DF.TV_train_b2 <- DF.TV_train %>%
-  filter(BUILDINGID == 2)
-DF.TV_test_b2 <- DF.TV_test %>%
-  filter(BUILDINGID == 2)
-DF.TV_train_b2$FLOOR <- droplevels(DF.TV_train_b2$FLOOR)
-DF.TV_test_b2$FLOOR <- droplevels(DF.TV_test_b2$FLOOR)
-
-set.seed(420)
-rg.TV.b2 <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train_b2,  importance = "permutation")
-pred.rg.TV.b2 <- predict(rg.TV.b2, DF.TV_test_b2)
-rg.TV.table.b2 <- table(DF.TV_test_b2$FLOOR, pred.rg.TV.b2$predictions) #0.92 accuracy
-print(confusionMatrix(rg.TV.table.b2))
-
-
-#LON
-
-set.seed(420)
-rg.TV.lon <- ranger(LONGITUDE ~ . - FLOOR - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train,  importance = "permutation")
-pred.TV.lon <- predict(rg.TV.lon, DF.TV_test)
-
-postResample(pred.TV.lon$predictions, DF.TV_test$LONGITUDE) #8.726 MAE
-postResample(rg.TV.lon$predictions, DF.TV_train$LONGITUDE)  #8.403 MAE
-
-plot(pred.TV.lon$predictions,DF.TV_test$LONGITUDE, col = DF.TV_test$BUILDINGID,
-     xlab="predicted",ylab="actual")
-abline(a=0,b=1)
-
-
-
-#LAT
-set.seed(420)
-rg.TV.lat <- ranger(LATITUDE ~ . - FLOOR - LONGITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.TV_train,  importance = "permutation")
-pred.TV.lat <- predict(rg.TV.lat, DF.TV_test)
-
-postResample(pred.TV.lat$predictions, DF.TV_test$LATITUDE) #7.578 MAE
-postResample(rg.TV.lat$predictions, DF.TV_train$LATITUDE)  #7.381 MAE
-
-plot(pred.TV.lat$predictions,DF.TV_test$LATITUDE, col = DF.TV_test$BUILDINGID,
-     xlab="predicted",ylab="actual")
-abline(a=0,b=1)
-
+t.test(knn.pred.lat)
+   
