@@ -43,7 +43,7 @@ Train$TIMESTAMP <- as_datetime(Train$TIMESTAMP)
 Train[Train == 100] <- -105
 
 #Test set
-str(Test[520:530])
+str(Test[520:529])
 
 Test$FLOOR <- as.factor(Test$FLOOR)
 Test$BUILDINGID <- as.factor(Test$BUILDINGID)
@@ -244,7 +244,7 @@ print(confusionMatrix(rg.val.table.b2))
 
 
 #LON
-
+set.seed(420)
 rg.val.lon <- ranger(LONGITUDE ~ . - FLOOR - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.val_train,  importance = "permutation")
 pred.val.lon <- predict(rg.val.lon, DF.val_test)
 
@@ -260,6 +260,7 @@ rf.val.lon <- train(LONGITUDE ~ . - FLOOR - LATITUDE - SPACEID - RELATIVEPOSITIO
 pred.rf.val.lon <- predict(rf.val.lon, DF.val_test_lon)
 
 #LAT
+set.seed(420)
 rg.val.lat <- ranger(LATITUDE ~ .   - FLOOR - LONGITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF.val_train,  importance = "permutation")
 pred.val.lat <- predict(rg.val.lat, DF.val_test)
 
@@ -485,36 +486,35 @@ postResample(pred.val.lat$predictions, DF.val_test$LATITUDE) #7.134 MAE
 
 
 #Adding Training lines to Validation -----
-TrainStep <- Train[ rowSums(Train[,c(1:520)] > -30) <= 1, ]
 
             
-LATLONf0 <- TrainStep %>%
+LATLONf0 <- Train %>%
   filter(FLOOR == 0) %>%
-  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  mutate(WAPs = sum(Train[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
-LATLONf1 <- TrainStep %>%
+LATLONf1 <- Train %>%
   filter(FLOOR == 1) %>%
-  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  mutate(WAPs = sum(Train[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
-LATLONf2 <- TrainStep %>%
+LATLONf2 <- Train %>%
   filter(FLOOR == 2) %>%
-  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  mutate(WAPs = sum(Train[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
-LATLONf3 <- TrainStep %>% 
+LATLONf3 <- Train %>% 
   filter(FLOOR == 3) %>%
-  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  mutate(WAPs = sum(Train[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
-LATLONf4 <- TrainStep %>%
+LATLONf4 <- Train %>%
   filter(FLOOR == 4) %>%
-  mutate(WAPs = sum(TrainStep[1:520])) %>%
+  mutate(WAPs = sum(Train[1:520])) %>%
   group_by(LATITUDE, LONGITUDE) %>%
   slice(which.max(WAPs))
 
@@ -637,7 +637,7 @@ LATITUDE <- function(Training, Testing){
   #KNN
   set.seed(420)
   knn.lat <- train(LATITUDE ~ ., Training, method = "knn")
-  knn.pred.lat <- predict(knn.lat, Testing, interval = "predict")
+  knn.pred.lat <- predict(knn.lat, Testing)
   knn.table.lat <- postResample(knn.pred.lat, Testing$LATITUDE)
   
   Model[["KNN"]] <- knn.lat
@@ -708,17 +708,54 @@ Results[["FLOOR"]] <- FLOOR(DF.TV, DF.val_test)
 Results[["LATITUDE"]] <- LATITUDE(DF.TV, DF.val_test)
 Results[["LONGITUDE"]] <- LONGITUDE(DF.TV, DF.val_test)
 
-set.seed(420)
-Training <- DF.TV %>%   select(-c(LONGITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
 
+Training <- DF.TV %>%   select(-c(LONGITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+set.seed(420)
 knn.lat <- train(LATITUDE ~ ., Training, method = "knn", trControl = train_control)
 knn.pred.lat <- predict(knn.lat, DF.val_test)
 knn.table.lat <- postResample(knn.pred.lat, DF.val_test$LATITUDE)
-error.lat <- qt(.95, nrow(DF.val_test)-1) * sd(knn.pred.lat) / sqrt(nrow(DF.val_test))
+error.lat <- qt(.95, nrow(Training)-1) * sd(knn.pred.lat) / sqrt(nrow(Training))
 
-plot(knn.pred.lat - DF.val_test$LATITUDE, type = "l")
-lines((knn.pred.lat - DF.val_test$LATITUDE) + error, col = "blue")
-lines((knn.pred.lat - DF.val_test$LATITUDE) - error, col = "red")
+#LAT errors
+plot(Results[[3]][[2]]$KNN - DF.val_test$LATITUDE, type = "l", col =  "blue")
+lines(Results[[3]][[2]]$RF$predictions - DF.val_test$LATITUDE, type = "l", col = "red")
 
-t.test(knn.pred.lat)
-   
+#LON errors
+plot(Results[[4]][[2]]$KNN - DF.val_test$LONGITUDE, type = "l", col =  "blue")
+lines(Results[[4]][[2]]$RF$predictions - DF.val_test$LONGITUDE, type = "l", col = "red")
+
+#ESQUISSE
+library(esquisse)
+
+PredDiff <- data.frame(LAT.KNN <- Results[[3]][[2]]$KNN - DF.val_test$LATITUDE,
+                       LAT.RF <- Results[[3]][[2]]$RF$predictions - DF.val_test$LATITUDE,
+                       LON.KNN <- Results[[4]][[2]]$KNN - DF.val_test$LONGITUDE,
+                       LON.RF <- Results[[4]][[2]]$RF$predictions - DF.val_test$LONGITUDE,
+                       B.KNN <- Results[[1]][[2]]$KNN,
+                       B.RF <- Results[[1]][[2]]$RF$predictions,
+                       B.Test <- DF.val_test$BUILDINGID,
+                       F.KNN <- Results[[2]][[2]]$KNN,
+                       F.RF <- Results[[2]][[2]]$RF$predictions,
+                       F.Test <- DF.val_test$FLOOR,
+                       BUILDING = DF.val_test$BUILDINGID,
+                       FLOOR = DF.val_test$FLOOR,
+                       PHONEID = DF.val_test$PHONEID,
+                       USERID = DF.val_test$USERID)
+
+
+#LAT ERRORS
+ggplot(DF.val_test) + aes(x = as.numeric(row.names(PredDiff))) + 
+  geom_line(aes(y = PredDiff$LAT.KNN), stat = "identity", col = "#00bfa5", size = 3) + 
+  geom_line(aes(y = PredDiff$LAT.RF), stat = "identity", col = "#ef6c00") +
+  labs(x = "", y = "MAE", title = "Latitude Errors", subtitle = "KNN vs RF") +
+  theme_gray()
+
+#LON ERRORS
+ggplot(DF.val_test) + aes(x = as.numeric(row.names(PredDiff))) + 
+  geom_line(aes(y = PredDiff$LON.KNN), stat = "identity", col = "blue") + 
+  geom_line(aes(y = PredDiff$LON.RF), stat = "identity", col = "red") +
+  labs(x = "", y = "MAE", title = "Longitude Errors", subtitle = "KNN vs RF") +
+  theme_gray()
+
+#B ERRORS
+
