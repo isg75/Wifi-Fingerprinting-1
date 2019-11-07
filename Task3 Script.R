@@ -85,6 +85,14 @@ print(confusionMatrix(rg.table.building))
 importance(df.rg.building)
 
 #Floor RF per building
+
+df.rg.floor <- ranger(FLOOR ~ . - LONGITUDE - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF_train,  importance = "permutation")
+pred.rg.floor <- predict(df.rg.floor, DF_test)
+rg.table.floor <- table(DF_test$FLOOR, pred.rg.floor$predictions) #0.99 accuracy
+print(confusionMatrix(rg.table.floor))
+
+
+
 #B0
 
 DF_train_b0 <- DF_train %>%
@@ -760,5 +768,152 @@ ggplot(Test) +
   labs(title = "Validation Latitude Longitude") +
   theme_minimal()
 
+#FinalTest -----
+
+#UPLOAD DATA 
+
+FinalTest <- read_csv("Data/Final.csv")
+View(FinalTest)
 
 
+
+#FEATURE ENGINEERING
+
+#Train set
+str(FinalTest[520:529])
+
+FinalTest$FLOOR <- as.factor(FinalTest$FLOOR)
+FinalTest$BUILDINGID <- as.factor(FinalTest$BUILDINGID)
+FinalTest$SPACEID <- as.factor(FinalTest$SPACEID)
+FinalTest$RELATIVEPOSITION <- as.factor(FinalTest$RELATIVEPOSITION)
+FinalTest$USERID <- as.factor(FinalTest$USERID)
+FinalTest$PHONEID <- as.factor(FinalTest$PHONEID)
+FinalTest$TIMESTAMP <- as_datetime(FinalTest$TIMESTAMP)
+
+FinalTest[FinalTest == 100] <- -105
+
+
+
+
+#Model 1 [RF, RF, KNN, KNN] ----
+M1.pred.building <- predict(Results[[1]][[1]]$RF, FinalTest)
+summary(M1.pred.building$predictions)
+
+M1.FinalTest <- FinalTest
+M1.FinalTest$BUILDINGID <- NULL
+M1.FinalTest$BUILDINGID <- M1.pred.building$predictions
+
+
+M1.pred.floor <- predict(Results[[2]][[1]]$RF, M1.FinalTest)
+summary(M1.pred.floor$predictions)
+
+M1.pred.lon <- predict(Results[[4]][[1]]$KNN, M1.FinalTest)
+summary(M1.pred.lon)
+
+M1.pred.lat <- predict(Results[[3]][[1]]$KNN, M1.FinalTest)
+summary(M1.pred.lat)
+
+plot_ly(type = "scatter3d",
+        x =  M1.pred.lat,
+        y =  M1.pred.lon,
+        z =  M1.pred.floor$predictions,
+        mode = 'markers',
+        color = ~M1.pred.building$predictions)
+
+#Model 2 [Train + Validation] ----
+M2.pred.building <- predict(df.rg.building, FinalTest)
+summary(M2.pred.building$predictions)
+
+M2.FinalTest <- FinalTest
+M2.FinalTest$BUILDINGID <- NULL
+M2.FinalTest$BUILDINGID <- M2.pred.building$predictions
+
+M2.pred.floor <- predict(df.rg.floor, M2.FinalTest)
+summary(M2.pred.floor$predictions)
+
+M2.pred.lon <- predict(rg.lon, M2.FinalTest)
+summary(M2.pred.lon$predictions)
+
+M2.pred.lat <- predict(rg.lat, M2.FinalTest)
+summary(M2.pred.lat$predictions)
+
+plot_ly(type = "scatter3d",
+        x =  M2.pred.lat$predictions,
+        y =  M2.pred.lon$predictions,
+        z =  M2.pred.floor$predictions,
+        mode = 'markers',
+        color = ~M2.pred.building$predictions)
+
+#Model 3 [RF, RF, RF, RF] ----
+M3.pred.building <- predict(Results[[1]][[1]]$RF, FinalTest)
+summary(M3.pred.building$predictions)
+
+M3.FinalTest <- FinalTest
+M3.FinalTest$BUILDINGID <- NULL
+M3.FinalTest$BUILDINGID <- M3.pred.building$predictions
+
+
+M3.pred.floor <- predict(Results[[2]][[1]]$RF, M3.FinalTest)
+summary(M3.pred.floor$predictions)
+
+M3.pred.lon <- predict(Results[[4]][[1]]$RF, M3.FinalTest)
+summary(M3.pred.lon$predictions)
+
+M3.pred.lat <- predict(Results[[3]][[1]]$RF, M3.FinalTest)
+summary(M3.pred.lat$predictions)
+
+plot_ly(type = "scatter3d",
+        x =  M3.pred.lat$predictions,
+        y =  M3.pred.lon$predictions,
+        z =  M3.pred.floor$predictions,
+        mode = 'markers',
+        color = ~M3.pred.building$predictions)
+
+#Model 4 [Val only] -----
+M4.pred.building <- predict(df.val.rg.building, FinalTest)
+summary(M4.pred.building$predictions)
+
+M4.FinalTest <- FinalTest
+M4.FinalTest$BUILDINGID <- NULL
+M4.FinalTest$BUILDINGID <- M4.pred.building$predictions
+
+M4.pred.floor <- predict(df.val.rg.floor, M4.FinalTest)
+summary(M4.pred.floor$predictions)
+
+M4.pred.lon <- predict(rg.val.lon, M4.FinalTest)
+summary(M4.pred.lon$predictions)
+
+M4.pred.lat <- predict(rg.val.lat, M4.FinalTest)
+summary(M4.pred.lat$predictions)
+
+plot_ly(type = "scatter3d",
+        x =  M4.pred.lat$predictions,
+        y =  M4.pred.lon$predictions,
+        z =  M4.pred.floor$predictions,
+        mode = 'markers',
+        color = ~M4.pred.building$predictions)
+
+#Model 5 [KNN, KNN, KNN, KNN] ------
+M5.pred.building <- predict(Results[[1]][[1]]$KNN, FinalTest)
+summary(M5.pred.building)
+
+M5.FinalTest <- FinalTest
+M5.FinalTest$BUILDINGID <- NULL
+M5.FinalTest$BUILDINGID <- M5.pred.building
+
+
+M5.pred.floor <- predict(Results[[2]][[1]]$KNN, M5.FinalTest)
+summary(M5.pred.floor)
+
+M5.pred.lon <- predict(Results[[4]][[1]]$KNN, M5.FinalTest)
+summary(M5.pred.lon)
+
+M5.pred.lat <- predict(Results[[3]][[1]]$KNN, M5.FinalTest)
+summary(M5.pred.lat)
+
+plot_ly(type = "scatter3d",
+        x =  M5.pred.lat,
+        y =  M5.pred.lon,
+        z =  M5.pred.floor,
+        mode = 'markers',
+        color = ~M5.pred.building)
