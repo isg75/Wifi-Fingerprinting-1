@@ -8,7 +8,7 @@ if (!require("pacman")) {
     pacman::p_load(e1071, plotly, purrr, Metrics, randomForestSRC, caTools, Rfast, DMwR, ranger, h2o, lubridate, ggplot2, RMySQL, caret, readr, dplyr, tidyr, rstudioapi)
 }
 
-#DIRECTORY? -----
+#DIRECTORY -----
 
 current_path = getActiveDocumentContext()$path
 setwd(dirname(current_path))
@@ -16,7 +16,6 @@ setwd("..")
 getwd()
 
 
-set.seed(420)
 
 #UPLOAD DATA -----
 
@@ -63,6 +62,7 @@ Test[Test == 100] <- -105
 plot(Train$LONGITUDE, Train$LATITUDE)
 plot(Test$LONGITUDE, Test$LATITUDE)
 
+
 DF <- rbind(Train, Test)
 s_size <- floor(0.75*nrow(DF))
 set.seed(420)
@@ -72,15 +72,11 @@ DF_test <- DF[-inTraining, ]
 
 #Cross Validation ----
 
-trainX <- Train[,names(Train) != "Direction"]
-preProcValues <- preProcess(x = trainX,method = c("center", "scale"))
-preProcValues
-
-# Define train control for k fold cross validation
 train_control <- trainControl(method="cv", number=10)
 
 
-#BUILDING RF -----
+#Training + Validation -----
+#BUILDING
 
 df.rg.building <- ranger(BUILDINGID ~ . - LONGITUDE - LATITUDE - FLOOR - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF_train, importance = "permutation")
 df.pred.building <- predict(df.rg.building, DF_test)
@@ -88,8 +84,7 @@ rg.table.building <- table(DF_test$BUILDINGID, df.pred.building$predictions) #1.
 print(confusionMatrix(rg.table.building))
 importance(df.rg.building)
 
-#Floor RF per building -----
-
+#Floor RF per building
 #B0
 
 DF_train_b0 <- DF_train %>%
@@ -142,7 +137,7 @@ print(confusionMatrix(rg.table.b2))
 
 
 
-#LAT/LON -----
+#LAT/LON
 
 
 rg.lon <- ranger(LONGITUDE ~ . - FLOOR - LATITUDE - SPACEID - RELATIVEPOSITION - USERID - PHONEID - TIMESTAMP, DF_train,  importance = "permutation")
@@ -709,13 +704,7 @@ Results[["LATITUDE"]] <- LATITUDE(DF.TV, DF.val_test)
 Results[["LONGITUDE"]] <- LONGITUDE(DF.TV, DF.val_test)
 
 
-Training <- DF.TV %>%   select(-c(LONGITUDE, FLOOR, SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
-set.seed(420)
-knn.lat <- train(LATITUDE ~ ., Training, method = "knn", trControl = train_control)
-knn.pred.lat <- predict(knn.lat, DF.val_test)
-knn.table.lat <- postResample(knn.pred.lat, DF.val_test$LATITUDE)
-error.lat <- qt(.95, nrow(Training)-1) * sd(knn.pred.lat) / sqrt(nrow(Training))
-
+#PLOTS ----
 #LAT errors
 plot(Results[[3]][[2]]$KNN - DF.val_test$LATITUDE, type = "l", col =  "blue")
 lines(Results[[3]][[2]]$RF$predictions - DF.val_test$LATITUDE, type = "l", col = "red")
@@ -745,17 +734,31 @@ PredDiff <- data.frame(LAT.KNN <- Results[[3]][[2]]$KNN - DF.val_test$LATITUDE,
 
 #LAT ERRORS
 ggplot(DF.val_test) + aes(x = as.numeric(row.names(PredDiff))) + 
-  geom_line(aes(y = PredDiff$LAT.KNN), stat = "identity", col = "#00bfa5", size = 3) + 
-  geom_line(aes(y = PredDiff$LAT.RF), stat = "identity", col = "#ef6c00") +
+  geom_line(aes(y = PredDiff$LAT.KNN), stat = "identity", col = "#00bfa5", size = 0.75) + 
+  geom_line(aes(y = PredDiff$LAT.RF), stat = "identity", col = "#ef6c00", size = 0.75) +
   labs(x = "", y = "MAE", title = "Latitude Errors", subtitle = "KNN vs RF") +
-  theme_gray()
+  theme_minimal()
 
 #LON ERRORS
 ggplot(DF.val_test) + aes(x = as.numeric(row.names(PredDiff))) + 
-  geom_line(aes(y = PredDiff$LON.KNN), stat = "identity", col = "blue") + 
-  geom_line(aes(y = PredDiff$LON.RF), stat = "identity", col = "red") +
+  geom_line(aes(y = PredDiff$LON.KNN), stat = "identity", col = "#00bfa5", size = 0.75) + 
+  geom_line(aes(y = PredDiff$LON.RF), stat = "identity", col = "#ef6c00", size = 0.75) +
   labs(x = "", y = "MAE", title = "Longitude Errors", subtitle = "KNN vs RF") +
-  theme_gray()
+  theme_minimal()
 
-#B ERRORS
+
+
+ggplot(Train) +
+  aes(x = LATITUDE, y = LONGITUDE) +
+  geom_point(size = 1L, colour = "#00bfa5") +
+  labs(title = "Train Latitude Longitude") +
+  theme_minimal()
+
+ggplot(Test) +
+  aes(x = LATITUDE, y = LONGITUDE) +
+  geom_point(size = 1L, colour = "#00bfa5") +
+  labs(title = "Validation Latitude Longitude") +
+  theme_minimal()
+
+
 
