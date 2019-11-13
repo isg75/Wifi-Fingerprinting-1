@@ -820,6 +820,12 @@ plot_ly(type = "scatter3d",
         mode = 'markers',
         color = ~M1.pred.building$predictions)
 
+M1.Predictions <- data.frame(LATITUDE = M1.pred.lat,
+                             LONGITUDE = M1.pred.lon,
+                       FLOOR = M1.pred.floor$predictions)
+
+write.csv(M1.Predictions,"Data/Results/Model1.csv", row.names = FALSE)
+
 #Model 2 [Train + Validation] ----
 M2.pred.building <- predict(df.rg.building, FinalTest)
 summary(M2.pred.building$predictions)
@@ -843,6 +849,13 @@ plot_ly(type = "scatter3d",
         z =  M2.pred.floor$predictions,
         mode = 'markers',
         color = ~M2.pred.building$predictions)
+
+M2.Predictions <- data.frame(LATITUDE = M2.pred.lat$predictions,
+                             LONGITUDE = M2.pred.lon$predictions,
+                             FLOOR = M2.pred.floor$predictions)
+
+write.csv(M2.Predictions,"Data/Results/Model2.csv", row.names = FALSE)
+
 
 #Model 3 [RF, RF, RF, RF] ----
 M3.pred.building <- predict(Results[[1]][[1]]$RF, FinalTest)
@@ -869,6 +882,13 @@ plot_ly(type = "scatter3d",
         mode = 'markers',
         color = ~M3.pred.building$predictions)
 
+M3.Predictions <- data.frame(LATITUDE = M3.pred.lat$predictions,
+                             LONGITUDE = M3.pred.lon$predictions,
+                             FLOOR = M3.pred.floor$predictions)
+
+write.csv(M3.Predictions,"Data/Results/Model3.csv", row.names = FALSE)
+
+
 #Model 4 [Val only] -----
 M4.pred.building <- predict(df.val.rg.building, FinalTest)
 summary(M4.pred.building$predictions)
@@ -892,6 +912,13 @@ plot_ly(type = "scatter3d",
         z =  M4.pred.floor$predictions,
         mode = 'markers',
         color = ~M4.pred.building$predictions)
+
+M4.Predictions <- data.frame(LATITUDE = M4.pred.lat$predictions,
+                             LONGITUDE = M4.pred.lon$predictions,
+                             FLOOR = M4.pred.floor$predictions)
+
+write.csv(M4.Predictions,"Data/Results/Model4.csv", row.names = FALSE)
+
 
 #Model 5 [KNN, KNN, KNN, KNN] ------
 M5.pred.building <- predict(Results[[1]][[1]]$KNN, FinalTest)
@@ -917,3 +944,10 @@ plot_ly(type = "scatter3d",
         z =  M5.pred.floor,
         mode = 'markers',
         color = ~M5.pred.building)
+
+M5.Predictions <- data.frame(LATITUDE = M5.pred.lat,
+                             LONGITUDE = M5.pred.lon,
+                             FLOOR = M5.pred.floor)
+
+write.csv(M5.Predictions,"Data/Results/Model5.csv", row.names = FALSE)
+
